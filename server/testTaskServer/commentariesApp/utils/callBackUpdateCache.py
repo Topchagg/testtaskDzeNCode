@@ -1,14 +1,12 @@
 from .cacheMethods import *
+from .deleteCacheByPattern import *
 
-def CallBackUpdateCache(selfInstance,callBackFunc,request,*args,**kwargs,):
+def CallBackUpdateCache(selfInstance,callBackFunc,cacheToClear,request,*args,**kwargs,):
     try:
-        pageNumber = request.GET.get("page")
-
-        keyOfCache = selfInstance.keyOfCache + pageNumber
-
         response =  callBackFunc(selfInstance,request,*args,**kwargs)
 
-        CacheMethods.deleteCache(keyOfCache)
+        deleteCacheByPattern(selfInstance.filteredCacheName) # Очищаю все фильтрационные кеши т.к любое изменение приводит к изменениям фильтров
+        CacheMethods.deleteCache(cacheToClear)
 
         return response
 

@@ -1,15 +1,26 @@
 
 
-def orderBy(querySet,fieldName,char):
+def orderBy(querySet, fieldName, inWhatOrder):
+    relatedFields = ["username", "email"]
 
     try:
-        if char != "-" and char != "+":
-            raise Exception("Char have to be + or -")
+        isRelated = False
+        if fieldName in relatedFields:
+            isRelated = True
 
-        if char == "-":
-            newQuerySet = querySet.order_by(char+fieldName)
-        elif char == "+":
-            newQuerySet = querySet.order_by(fieldName)
+        if inWhatOrder not in ["descending", "ascending"]:
+            raise Exception("Param have to be  'descending' or 'ascending' ")
+
+        if inWhatOrder == "descending":
+            if isRelated:
+                newQuerySet = querySet.select_related("owner").order_by(f"-owner__{fieldName}")
+            else:
+                newQuerySet = querySet.order_by(f"-{fieldName}")
+        else:
+            if isRelated:
+                newQuerySet = querySet.select_related("owner").order_by(f"owner__{fieldName}")
+            else:
+                newQuerySet = querySet.order_by(fieldName)
 
         return newQuerySet
 

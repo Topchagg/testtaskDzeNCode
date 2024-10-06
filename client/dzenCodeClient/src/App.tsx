@@ -1,13 +1,18 @@
+import { Route, Routes } from "react-router-dom"
+
+import Layout from "./pages/outlet/layout"
 import MainPage from "./pages/MainPage"
-// import RegestrationPage from "./pages/regestrationPage/RegestrationPage"
-import Comment from "./entities/comment/comment"
+
 
 function App() {
 
   return (
     <>
-      {/* <RegestrationPage/> */}
-      <Comment />
+      <Routes>
+          <Route element={<Layout/>}> 
+            <Route path='main' element={<MainPage/>}></Route>
+          </Route>
+      </Routes>
     </>
   )
 }

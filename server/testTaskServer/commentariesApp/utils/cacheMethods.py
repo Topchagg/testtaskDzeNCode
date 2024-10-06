@@ -7,6 +7,7 @@ class CacheMethods:
         return cache.get(key)
 
     def setCache(key, value, timeout):
+        print(key)
         cache.set(key, json.dumps(value,ensure_ascii=False), timeout)
 
     def deleteCache(key):
