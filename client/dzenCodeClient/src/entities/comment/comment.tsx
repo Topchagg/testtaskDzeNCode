@@ -1,147 +1,190 @@
-    import { useEffect, useState, useCallback } from 'react'
-    import { FC } from 'react'
-    import { AnimatePresence,motion } from 'framer-motion'
+import { useState, useCallback, useEffect } from 'react';
+import { FC } from 'react';
+import { AnimatePresence, motion } from 'framer-motion';
+import { Link } from 'react-router-dom';
+
+import { CommentType } from './api/commentarType';
+import { useDataStore, useJwtStore } from '../../zustand/zustand';
+import useDelete from '../../shared/customHooks/useDelete';
+import { deleteFile } from '../../firebase/firebaseScripts';
+
+import safeAdd from '../../shared/Functions/saveAdd';
+
+import './ui/comment.css';
 
 
-    import { CommentType } from './api/commentarType'
+const Comment: FC<CommentType> = (props) => {
+    const [page, setPage] = useState<number>(1); // Страница для подгрузки ответов
+    const userID = Number(localStorage.getItem('id')); // Преобразование ID к числу
+    const [data, setData] = useState<any>([]); // Храним данные о текущей странице и ссылке next для пагинации
+    const [allLoaded, setAllLoaded] = useState<boolean>(false); // Здесь очень много флаг-стейтов, их можно уменьшить, но время у меня закончилось :( 
+    const [showAnswers, setShowAnswers] = useState<boolean>(false); // Отвечает за показ комментариев и кнопок открытия-закрытия
+    const [isHasAnswers, setIsHasAnswers] = useState<boolean>(false); 
+    const [isAbleToLoad, setIsAbleToLoad] = useState<boolean>(false);
+    const [amountOfRealAnswers,setAmountOfRealAnswers] = useState<number>(0)
+    
+    
+    const jwt = useJwtStore((state: any) => state.jwt);
 
-    import { useDataStore } from '../../zustand/zustand'
+    const localDeletedMessages = useDataStore((state:any) => state.localDeletedMessages)
+    const setLocalDeletedMessages = useDataStore((state:any) => state.setLocalDeletedMessages)
+    const createdAnswers = useDataStore((state: any) => state.createdAnswers);
+    const setIsAnswer = useDataStore((state: any) => state.setIsAnswer); // Сохраняем ответ, к кому и к какому комментарию идет ответ
+    const setDeletedMessages = useDataStore((state:any) => state.setDeletedMessages)
+    const deletedMessages = useDataStore((state) => state.deletedMessages)
+    const removeCreatedAnswer = useDataStore((state) => state.removeCreatedAnswer)
 
-    import LoadingItem from '../../shared/ui/loadingItem/loadingitem'
+    const { deleteItem, loading, error, success } = useDelete('http://127.0.0.1:8000/message/'); // Кастомный хук для удаления
 
-    import './ui/comment.css'
-
-
-    const Comment: FC<CommentType> = (props) => {
-
-        const [answers, setAnswers] = useState<CommentType[] | null>(null)
-        const [loadedAnswers, setLoadedAnswers] = useState<CommentType[]>([])
-        const [page, setPage] = useState<number>(1)
-        const [isLoading, setIsLoading] = useState(false)
-        const [allLoaded, setAllLoaded] = useState(false)
-        const [showAnswers, setShowAnswers] = useState(false)
-        const [createdLocalAnswer,setCreatedLocalAnswer] = useState<boolean>(false)
-        
-        const setIsAnswer = useDataStore((state: any) => state.setIsAnswer)
-        const createdAnswers = useDataStore((state: any) => state.createdAnswers)
-
-
-        const handleOnMakeAnswer = useCallback(() => {
-            const answerTo = props.isAnswer ? props.answerTo : props.id
-            setIsAnswer(answerTo, props.owner.username)
-        }, [props.isAnswer, props.answerTo, props.id, props.owner.username, setIsAnswer])
-
-        const handleLoadAnswers = useCallback(async () => {
-            if (allLoaded) {
-                setShowAnswers((prev) => !prev)
-                return
-            }
-
-            if (createdLocalAnswer && !props.hasAnswers){
-                setAllLoaded(true)
-                setShowAnswers(false)
-                return
-            }
-
-            setIsLoading(true)
-            const response = await fetch(`http://127.0.0.1:8000/answers?page=${page}&messageID=${props.id}`)
-            const data = await response.json()
-
-            setLoadedAnswers((prevAnswers) => [...prevAnswers, ...data.results])
-
-            if (data.next) {
-                setPage((prevPage) => prevPage + 1)
-            } else {
-                setAllLoaded(true)
-            }
-
-            setShowAnswers(true)
-            setIsLoading(false)
-        }, [allLoaded, page, props.id])
-
-        const wrapperStyle = props.isAnswer ? "answer-wrapper" : "comment-wrapper"
-
-        useEffect(() => {
-            if (createdAnswers[props.id]) {
-                setAnswers(createdAnswers[props.id])
-                if(!props.hasAnswers){
-                    setCreatedLocalAnswer(true)
+    // Загрузка ответов на комментарии
+    const handleOnLoadAnswers = async () => {
+        if (!allLoaded) {
+            try {
+                const response = await fetch(`http://127.0.0.1:8000/answers?page=${page}&messageID=${props.id}`, {
+                    method: 'GET',
+                });
+                
+                const result = await response.json();
+                
+                if (result.next) {
+                    setPage((prev) => prev + 1);
+                } else {
+                    setAllLoaded(true);
+                    setIsAbleToLoad(false); 
                 }
-                setShowAnswers(true)
-            }
-        }, [createdAnswers, props.id])
 
+                const existingIds = new Set([
+                    ...data.map(comment => comment.id), 
+                    ...(createdAnswers[props.id] || []).map(answer => answer.id)  // Получаю только уникальные айдишник, чтоб не было дубликации
+                ]); 
+
+                const uniqueResults = result.results.filter(comment => !existingIds.has(comment.id));
+
+                setData(prevData => [...prevData, ...uniqueResults]);
+
+                setIsHasAnswers(true);
+                setShowAnswers(true);
+            } catch (error) {
+                console.error('Error loading answers:', error);
+            }
+        }
+    };
+
+    useEffect(() => {
+        if (createdAnswers[props.id]) {
+            setShowAnswers(true);
+            setIsHasAnswers(true);
+        }
+    }, [createdAnswers]);
+
+    useEffect(() => {
+        if (props.hasAnswers) {
+            setIsAbleToLoad(true);
+        }
+    }, [props.hasAnswers]);
+
+    useEffect(() => {
+        setAmountOfRealAnswers(safeAdd(createdAnswers[props.id]?.length,
+            data?.length,
+            deletedMessages?.length * (-1),
+            localDeletedMessages[props.id]))
+    },[data,createdAnswers,deletedMessages,localDeletedMessages])
+
+    useEffect(() => {
+        if(success){
+            setDeletedMessages(props.id)
+            removeCreatedAnswer(Number.parseInt(props.id))
+            if(props.isLocal){
+                setLocalDeletedMessages(props.answerTo)
+            }
+            if(props.file){
+                deleteFile(props.file)
+            } // Удаление файла с облачного хранилища 
+        }
+    },[success])
+
+    // Обработка нажатия на "Ответить"
+    const handleOnMakeAnswer = useCallback(() => {
+        const answerTo = props.isAnswer ? props.answerTo : props.id; // Если это ответ на другой ответ, берем родительский комментарий
+        setIsAnswer(answerTo, props.owner.username); // Сохраняем данные о том, кому отвечаем
+    }, [props.isAnswer, props.answerTo, props.id, props.owner.username, setIsAnswer]);
+
+    const wrapperStyle = props.isAnswer ? 'answer-wrapper' : 'comment-wrapper'; // Определяю стили обертки
+    if(deletedMessages.find((item,index) => item === Number.parseInt(props.id))){
+        return 
+    }else {
         return (
             <div className={wrapperStyle}>
-                {props.localUserId === Number.parseInt(props.owner.pk) && <div className='is-clickable'>Delete</div> }
-                {isLoading && <LoadingItem />}
+                {/* Удаление доступно только владельцу комментария */}
+                {userID === props.owner.pk && (
+                    <div className="is-clickable" onClick={() => deleteItem(props.id, jwt)}>
+                        {loading ? 'Deleting...' : 'Delete'}
+                    </div>
+                )}
+    
                 <div className="user-nav-bar">
                     <div className="avatar-wrapper"></div>
                     <div className="user-data">
                         <div>{props.owner?.username}</div>
-                        <div className='xs-margin'>{props.owner?.email}</div>
+                        <div className="xs-margin">{props.owner?.email}</div>
                     </div>
-                    
                 </div>
+    
                 <div className="text-section semi-border">
-                    <div className="text-wrapper s-margin">
-                        {props.text}
-                    </div>
+                    <div className="text-wrapper s-margin">{props.text}</div>
                 </div>
+    
                 <div className="comment-btns btn is-clickable">
-                    <div className='default-btn semi-border make-answer-btn' onClick={handleOnMakeAnswer}>Відповісти</div>
-                    {props.file && <>Подивитись вложене</>}
-                    
-                </div>
-
-
-
-                {/* Загруженные ответы с сервера */}
-                <AnimatePresence>
-                    {showAnswers && loadedAnswers.map((item: CommentType) => (
-                        <motion.div
-                        initial={{opacity:0,height:0}}
-                        animate={{opacity:1,height:"auto",overflow:"hidden"}}
-                        exit={{height:0,overflow:"hidden",filter:'blur(5px)'}}
-                        transition={{duration:0.75}}
-                        ><Comment key={item.id} {...item} /></motion.div>
-                    ))}
-                </AnimatePresence>
-                {/* Локальные ответы */}
-                <AnimatePresence>
-                    {showAnswers && answers?.map((item) => (
-                        <motion.div
-                        initial={{opacity:0,height:0}}
-                        animate={{opacity:1,height:"auto",overflow:"hidden"}}
-                        exit={{height:0,opacity:0,overflow:"hidden"}}
-                        transition={{duration:0.75}}
-                        ><Comment key={item.id} {...item} /></motion.div>
-                    ))}
-                </AnimatePresence>
-
-                {(!props.isAnswer || createdAnswers) && (
-                    <div className="show-asnwers-btn-wrapper s-margin">
-                        {!allLoaded && props.hasAnswers && !isLoading && (
-                            <div className="default-btn s-margin" onClick={handleLoadAnswers}>
-                                Загрузити відповіді
-                            </div>
-                        )}
-
-                        {showAnswers && (
-                            <div className="default-btn s-margin" onClick={() => setShowAnswers(false)}>
-                                Закрити коментарі
-                            </div>
-                        )}
-
-                        {!showAnswers && (allLoaded || createdLocalAnswer) && (
-                            <div className="default-btn s-margin" onClick={() => setShowAnswers(true)}>
-                                Показати коментарі
-                            </div>
-                        )}
+                    <div className="default-btn semi-border make-answer-btn" onClick={handleOnMakeAnswer}>
+                        Відповісти
                     </div>
-                )}
+                    {props.file && <Link to={props.file}><div>Подивитись вложене</div></Link>}
+                </div>
+    
+                
+                
+                <AnimatePresence>
+                    {data && showAnswers && data.map((item: CommentType) => (
+                        <motion.div
+                        initial={{ opacity: 0, height: 0 }}
+                        animate={{ opacity: 1, height: "auto", overflow: "hidden" }}
+                        exit={{ height: 0, opacity: 0, overflow: "hidden" }}
+                        transition={{ duration: 0.75 }}
+                        >
+                            <Comment {...item} key={item.id} />
+                        </motion.div>
+                    ))}
+    
+                    {createdAnswers[props.id] && showAnswers && createdAnswers[props.id].map((item: CommentType, key: number) => (
+                        <motion.div
+                        initial={{ opacity: 0, height: 0 }}
+                        animate={{ opacity: 1, height: "auto", overflow: "hidden" }}
+                        exit={{ height: 0, opacity: 0, overflow: "hidden" }}
+                        transition={{ duration: 0.75 }}>
+                            <Comment {...item} key={key} />
+                        </motion.div>
+                    ))}
+                </AnimatePresence>
+    
+                {props.hasAnswers && isAbleToLoad && !(amountOfRealAnswers > props.amountOfAnswers) &&
+                <div className='default-btn s-margin' onClick={handleOnLoadAnswers}>
+                    Загрузити коментарі
+                </div>}
+                {Boolean(amountOfRealAnswers) && <>
+                    {isHasAnswers && !props.isAnswer && showAnswers && 
+                    <div className='default-btn s-margin' onClick={() => setShowAnswers(!showAnswers)}>
+                        Закрити коментарі
+                    </div>}
+                    {!showAnswers && !isAbleToLoad && !props.isAnswer && isHasAnswers &&
+                    <div className='default-btn s-margin' onClick={() => setShowAnswers(!showAnswers)}>
+                        Відкрити коментарі
+                </div>}
+                </>}
+    
+                {error && <div className="error-message">Ошибка при удалении: {error}</div>}
             </div>
-        )
+        );
     }
+};
 
-    export default Comment
+export default Comment;

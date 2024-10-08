@@ -28,7 +28,7 @@ class fullMessageSerializer(ModelSerializer):
         model = Message
         fields = '__all__'
 
-    
+
 class CreateMessageSerializer(ModelSerializer):
 
     class Meta:

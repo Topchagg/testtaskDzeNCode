@@ -2,16 +2,21 @@ import CommentariesPage from "./commentariesPage/commentariesPage"
 import RegestrationPage from "./regestrationPage/RegestrationPage"
 
 
-import { useJwtStore } from "../zustand/zustand"
+import {useJwtStore } from "../zustand/zustand"
 import { useEffect } from "react"
 
 const MainPage = () => {
 
+    const setJwt = useJwtStore((state:any) => state.setJwt)
     const jwt = useJwtStore((state:any) => state.jwt)
 
     useEffect(() => {
-        console.log(jwt)
-    },[jwt])
+        const jwt = localStorage.getItem("jwt")
+        if (jwt) {
+            setJwt(jwt)
+        }
+    },[])
+
   
     return (
         <>  

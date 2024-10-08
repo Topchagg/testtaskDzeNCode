@@ -142,7 +142,7 @@ class MessageView(ModelViewSet):
         except Exception as e:
             print(e)
             return Response({"message": "Something went wrong"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-    
+
     def create(self, request, *args, **kwargs):
         jwtAuth = JWTAuthentication()
 
@@ -152,11 +152,13 @@ class MessageView(ModelViewSet):
 
             serializedData = UserDetailSerializer(neededUser, many=False)
 
+            print(json.loads(request.body))
+
+
             newData = {
                 "owner": serializedData.data.get("pk"),  
                 **json.loads(request.body) 
             }
-
             serializer = CreateMessageSerializer(data=newData, many=False)
             if serializer.is_valid():
                 deleteCacheByPattern(self.filteredCacheName)
@@ -170,6 +172,7 @@ class MessageView(ModelViewSet):
                     "id": created_message.id,  
                     "result": response_serializer.data  
                 }, status=status.HTTP_201_CREATED)
+            
 
             return Response({
                 "message": "Data isn't valid",
@@ -182,6 +185,7 @@ class MessageView(ModelViewSet):
             }, status=status.HTTP_404_NOT_FOUND)
 
         except json.JSONDecodeError:
+            print(json.JSONDecodeError)
             return Response({
                 "message": "Invalid JSON",
             }, status=status.HTTP_400_BAD_REQUEST)
@@ -192,11 +196,8 @@ class MessageView(ModelViewSet):
                 "message": "Something went wrong",
                 "error": str(e)     
             }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-    
-    def destroy(self, request, *args, **kwargs):
+        
 
-        deleteCacheByPattern(MessageView.filteredCacheName) # Удаляю все фильтрационные страницы (Если бы)
-        return super().destroy(request, *args, **kwargs)
 # ApViews -> 
 
 class getAnswers(APIView):
@@ -211,8 +212,7 @@ class getAnswers(APIView):
             if not messageID:
                 return Response({"message":"Wrong params"},status=status.HTTP_400_BAD_REQUEST)
 
-            answers = Message.objects.filter(answerTo=messageID).filter(isAnswer=True).order_by('-dateOfCreating')
-
+            answers = Message.objects.filter(answerTo=messageID).filter(isAnswer=True).order_by('dateOfCreating')
             paginatedAnswers = paginator.paginate_queryset(answers,request)
             serializedData = fullMessageSerializer(paginatedAnswers, many=True).data
 

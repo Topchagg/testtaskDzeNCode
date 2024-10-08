@@ -25,17 +25,12 @@ class User(AbstractBaseUser,PermissionsMixin):
 
 class Message(models.Model):
     owner = models.ForeignKey(User,on_delete=models.PROTECT,null=True,blank=True,default=None)
-    # username = models.CharField(max_length=100)
-    # email = models.EmailField()
-    # homepage = models.URLField(blank=True,null=True,unique=True)
-    # captcha = models.CharField() // client
     text = models.TextField()
-    image = models.URLField(blank=True,null=True)
+    file = models.TextField(blank=True,null=True)
     dateOfCreating = models.DateTimeField(auto_now=True)
-    
-
+    amountOfAnswers = models.IntegerField(default=0)
     isAnswer = models.BooleanField(default=False)
-    answerTo = models.ForeignKey('self',on_delete=models.CASCADE,null=True,blank=True)
+    answerTo = models.ForeignKey('self',related_name='answers',on_delete=models.CASCADE,null=True,blank=True)
     hasAnswers = models.BooleanField(default=False)
 
 

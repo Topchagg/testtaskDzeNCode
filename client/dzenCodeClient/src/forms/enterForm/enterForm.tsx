@@ -8,7 +8,7 @@ import {
     useActionOnSubmit, 
     formIsValid, 
     getFormValues 
-} from "reactive-fast-form"
+} from "reactive-fast-form" // Это моя библиотека - больше описаний в файле forms/CommentForm/CommentForm.ts
 
 import usePost from "../../shared/customHooks/usePost"
 import { useJwtStore, useDataStore } from "../../zustand/zustand"
@@ -16,7 +16,6 @@ import LoadingItem from "../../shared/ui/loadingItem/loadingitem"
 
 const EnterForm = () => {
     const setJwt = useJwtStore((state: any) => state.setJwt)
-    const setUserID = useDataStore((state: any) => state.setUserID)
 
     const [form, setForm, trigger] = useCreateForm(["username", "password"])
 
@@ -41,9 +40,10 @@ const EnterForm = () => {
     useEffect(() => {
         if (isOk && data) {
             setJwt(data?.['access']) 
-            setUserID(data?.['userId']) 
+            localStorage.setItem("jwt",data?.['access'])
+            localStorage.setItem("id",data?.['userId'])
         }
-    }, [isOk, data, setJwt, setUserID])
+    }, [isOk, data, setJwt])
 
     return (
         <>  

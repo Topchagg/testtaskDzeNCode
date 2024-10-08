@@ -8,7 +8,8 @@ type CommentType = {
     file?:string,
     answerTo?:number,
     hasAnswers:boolean,
-    localUserId:number|false|null
+    amountOfAnswers:number,
+    isLocal?:true
 }
 
 export type {CommentType}

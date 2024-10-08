@@ -13,15 +13,14 @@ class IsOwner(permissions.BasePermission):
             
             jwtAuth = JWTAuthentication()
 
-            result = jwtAuth.authenticate(request=request)
+            user,token = jwtAuth.authenticate(request=request)
 
-            if result:
+            if not user:
                 raise Exception("Authentication failed")
 
-            userObject = get_object_or_404(username=result.username)
-            serializedData = UserDetailSerializer(userObject,many=False).data
+            userObject = get_object_or_404(User,id=user.id)
 
-            return serializedData.get("username") == obj.username
+            return True
         except Exception as e:
             print(e)
             return False    

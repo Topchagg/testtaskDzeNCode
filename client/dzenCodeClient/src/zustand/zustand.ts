@@ -3,23 +3,26 @@ import { create } from "zustand";
 import { CommentType } from "../entities/comment/api/commentarType";
 
 interface createdAnswers  {
-    [x:string]: CommentType[]
+    id:number[],
+    [x:string]: {}
 }
 
 interface useDataStore {
     createdAnswers:createdAnswers,
     answerTo:number|false,
-    createdMessage:CommentType|null,
     username:string|false,
+    isLocalDeleted:boolean,
     isAnswer:boolean,
-    isUpdated:boolean,
-    userID:false|number,
+    isChanged:boolean,
+    localDeletedMessages:any,
+    deletedMessages: number[],
     setIsAnswer: (newAnswerTo:string,newUserName:string) => void,
     setNullAnswer: () => void,
-    // setIsUpdated: (state:useDataStore) => void,
-    setCreatedAnswers: (newAnswer:CommentType) => void,
-    setCreatedMessage: (newAnswer:CommentType) => void,
-    setUserID: (userID:string) => void,
+    setIsChanged: () => void,
+    setCreatedAnswers: (commet:CommentType) => void,
+    setDeletedMessages: (id:number) => void,
+    removeCreatedAnswer: (id:number) => void,
+    setLocalDeletedMessages: (deletedAnswer:CommentType) => void,
 }
 
 const useJwtStore =  create((set) => ({
@@ -28,23 +31,36 @@ const useJwtStore =  create((set) => ({
 }))
 
 const useDataStore = create<useDataStore>((set) => ({
-    createdAnswers:{}, // Для ответов 
-    createdMessage:null,// Для сообщений. Это можно было бы объеденить, но кол-во спредов увеличивается
+    createdAnswers: { id: [] }, // Для ответов 
+    deletedMessages: [], // Для сообщений. Это можно было бы объединить, но количество спредов увеличивается,
     answerTo: false,
     username: false,
-    isAnswer:false,
-    isUpdated:false,
+    isAnswer: false,
+    isLocalDeleted:false,
+    isChanged: false,
+    localDeletedMessages: {},
 
-    userID:false,
+    setLocalDeletedMessages: (answerTo:number) => set((state) => {
+        const objectToSave = {...state.localDeletedMessages}
 
-    setUserID: (userID) => set({userID:userID}),
+        if(!objectToSave[answerTo]){
+            objectToSave[answerTo] = 1;
+        }else {
+            objectToSave[answerTo] = objectToSave[answerTo] + 1
+        }
 
-    setIsAnswer: (newAnswerTo:string, newUserName?:string) => 
-        set({ answerTo: newAnswerTo, username: newUserName,isAnswer:true }),
+        return {localDeletedMessages:objectToSave}
+        
+    }),
+    setIsLocalDeleted: () => set((state) => ({isLocalDeleted:!state.isLocalDeleted})),
+    setDeletedMessages: (id) => set((state) => ({ deletedMessages: [...state.deletedMessages, id] })),
+    setIsChanged: () => set((state) => ({ isChanged: !state.isChanged })),
+    setIsAnswer: (newAnswerTo: string, newUserName?: string) => 
+        set({ answerTo: newAnswerTo, username: newUserName, isAnswer: true }),
 
-    setNullAnswer: () => set({answerTo:false,username:false,isAnswer:false}),
+    setNullAnswer: () => set({ answerTo: false, username: false, isAnswer: false }),
 
-    setCreatedAnswers: (newAnswer: CommentType) => 
+    setCreatedAnswers: (newAnswer: CommentType | null) => 
         set((state) => {
             const objectToSave = { ...state.createdAnswers }; 
             
@@ -53,12 +69,31 @@ const useDataStore = create<useDataStore>((set) => ({
             }
 
             objectToSave[newAnswer.answerTo].push(newAnswer);
+            objectToSave.id.push(newAnswer.id);
+
             return { createdAnswers: objectToSave }; 
         }),
 
-    setCreatedMessage: (newMessage: CommentType) => set({createdMessage:newMessage})
-}));
+    // Новая функция для удаления комментария по ID
+    removeCreatedAnswer: (id: number) => 
+        set((state) => {
+            const updatedCreatedAnswers = { ...state.createdAnswers }; // Копируем текущие ответы
 
+            // Проходим по всем ключам (answerTo) объекта createdAnswers
+            Object.keys(updatedCreatedAnswers).forEach((answerTo) => {
+                // Фильтруем комментарии, исключая те, у которых совпадает id
+                updatedCreatedAnswers[answerTo] = updatedCreatedAnswers[answerTo].filter(
+                    (comment: CommentType) => comment.id !== id
+                );
+            });
+
+            // Также удаляем ID из массива id
+            const updatedIds = state.createdAnswers.id.filter((existingId) => existingId !== id);
+
+            // Возвращаем обновленное состояние
+            return { createdAnswers: { ...updatedCreatedAnswers, id: updatedIds } };
+        }),
+}));
 
 export {useJwtStore}
 export {useDataStore}

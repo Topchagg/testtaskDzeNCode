@@ -1,4 +1,4 @@
-import { useEffect } from "react"
+import { useEffect, useState } from "react"
 
 import { useCreateForm,ReactiveForm, InputField
     , fieldSettings
@@ -8,13 +8,14 @@ import { useCreateForm,ReactiveForm, InputField
     ,FileField,
     getFormValues,
     rawSetter,
-} from "reactive-fast-form"
+} from "reactive-fast-form" // Это моя библиотека :)
 
 import usePost from "../../shared/customHooks/usePost"
 
 import LoadingItem from "../../shared/ui/loadingItem/loadingitem"
 import { useDataStore,useJwtStore } from "../../zustand/zustand"
 
+import { deleteFile, downloadFileTo } from "../../firebase/firebaseScripts"
 import Signal from "../../shared/ui/signal/signal"
 import checkTags from "../../shared/Functions/checkTags"
 
@@ -24,80 +25,85 @@ import './ui/commentForm.css'
 
 const CommentForm = () => {
 
-    const answerTo = useDataStore((state:any) => state.answerTo)
-    const username = useDataStore((state:any) => state.username)
-    const isAnswer:boolean = useDataStore((state:any) => state.isAnswer)
-    const setNullAnswer = useDataStore((state:any) => state.setNullAnswer)
+    const answerTo = useDataStore((state:any) => state.answerTo) // Даёт понять - является ли это ответом или же новым комментарием
+    const username = useDataStore((state:any) => state.username) // Даёт понять - является ли это ответом или же новым комментарием
+    const isAnswer:boolean = useDataStore((state:any) => state.isAnswer) // Даёт понять - является ли это ответом или же новым комментарием
+    const setNullAnswer = useDataStore((state:any) => state.setNullAnswer) // Функция которая сбрасывает данные ответа 
+    const setIsChanged = useDataStore((state:any) => state.setIsChanged)
+    const setCreatedAnswers = useDataStore((state:any) => state.setCreatedAnswers)
+    const [file,setFile] = useState<string>('')
 
-    const setCreatedAnswers = useDataStore((state) => state.setCreatedAnswers)
-    const setCreatedMessages = useDataStore((state) => state.setCreatedMessage)
+    // 1. answerTO/username/isAnswer -> объеденить всё в один объект
 
-    const jwt = useJwtStore((state:any) => state.jwt)
+    const jwt = useJwtStore((state:any) => state.jwt) // jwt для проверки на право создание
 
-    const [form,setForm,trigger] = useCreateForm(["text","file"])
+    const [form,setForm,trigger] = useCreateForm(["text","file"]) // Тут я создаю объект, функцию и триггер , они нужные для работы библиотеки
+
 
     const {isOk,data,loading,error,postData} = usePost("http://127.0.0.1:8000/message/")
 
-    const settings:fieldSettings = {
+    const settings:fieldSettings = { // Настройки для field's
         invalidClass: "invalid input",
         validClass: "valid input",
         dynamicStyles:true
     }
 
+    useEffect(() => {
+    if (isOk && data){
+        if (!isAnswer){
+            setIsChanged()
+        }else { // Создание локального ответа
+            setCreatedAnswers(
+                {...data.result,
+                answerTo:answerTo,
+                isAnswer:isAnswer,
+                image:file,
+                isLocal:true
+                },
+            )
+            setNullAnswer()
+            rawSetter(setForm,'file','',true)// Очищение глобального объекта (Чтоб не передавалось на другие созданные коменты)
+            setFile('')
+        }
+    }else if (!isOk){
+        deleteFile(file)
+        setFile('') // Очистка и удаление файла - если не вышло сохранить в базе данных
+        rawSetter(setForm,'file','',true)// Очищение глобального объекта (Чтоб не передавалось на другие созданные коменты)
+    }
+    },[data,isOk])
     
 
-    useActionOnSubmit(() => {
-        if(formIsValid(form)){
+    useActionOnSubmit(async () => { // Это кастомный хук - подобие useEffect он отрабатывает когда изменяется globalObject на данный момент это form
+        // в дальнейшем useActionOnSubmit и FormIsValid будут одним целым (Но это уменьшит гибкость :( )
+        if(formIsValid(form)){ // FormIsValid -> Проверяет являются ли все значения в form валидными
+            let urlLink = null;
+            if (form['file'].value){
+                urlLink = await downloadFileTo(form['file'].value,'files/')
+                setFile(urlLink)
+            }
             postData({
-                ...getFormValues(form),
-                isAnswer:isAnswer,
-                answerTo: Number.parseInt(answerTo)
+                ...getFormValues(form), // getFormValue просто возвращает значения с глобального объекта в виде {key:value} игнорируя isValid
+                isAnswer:isAnswer, 
+                answerTo: Number.parseInt(answerTo),
+                file:urlLink
             },{
                 headers:{
                 'Content-Type': 'application/json', 
                 'Authorization': `Bearer ${jwt}`,
             }})
         }
-    },trigger)
+    },trigger) // trigger здесь должен быть, без него не будет отрабатывать useAction соответственно этот кастомный хук базируется на useEffect
+    // а trigger это его зависимость
 
-    useEffect(() => {
-        if(isOk){
-            if(isAnswer){
-                setCreatedAnswers(
-                    {...getFormValues(form),
-                    isAnswer:isAnswer,
-                    answerTo: Number.parseInt(answerTo),
-                    id:data.id,
-                    owner: {
-                        username: data.result.owner.username,
-                        email: data.result.owner.email
-                    }})
-                setNullAnswer()
-            }else {
-                console.log(answerTo)
-                setCreatedMessages(
-                    {...getFormValues(form),
-                    isAnswer:isAnswer,
-                    answerTo: Number.parseInt(answerTo),
-                    id:data.id,
-                    owner: {
-                        username: data.result.owner.username,
-                        email: data.result.owner.email
-                    }}
-                )
-                setNullAnswer()
-            }
-        }
-    },[data])
-
-    const handleOnDeleteFile = () => {
-        rawSetter(setForm,'file','',true)
+    const handleOnDeleteFile = () => { // rawSetter используется для прямой манипуляции с глобальным объектом object
+        rawSetter(setForm,'file','',true)  // Очищаю file
     }
 
     return (
         <div>   
             {loading && <LoadingItem/>}
-            {form['file'].value && 
+            {error && <div className="title">Oups here's some error</div>}
+            {form['file'].value &&  // При выборе файла - показываю сообщение
             <Signal isError={false} 
             message={`Вы выбрали: ${form['file'].value?.name}`}
             callBack={handleOnDeleteFile}
@@ -107,30 +113,31 @@ const CommentForm = () => {
                     <div className="input-field-wrapper">
                     {answerTo && username && <div className="is-answer">Ви відповідаєте {username}  <span onClick={setNullAnswer} className="is-clickable">X</span></div> }
                         <InputField
-                        name="text"
-                        isTextArea
+                        name="text" // name один из списка при использовании useCreateForm
+                        isTextArea // Определение что это textArea
                         placeholder="Enter text"
                         {...settings}
-                        validFunc={checkTags}
-                        min={2}
-                        max={500}
-                        isTrigger
-                        resetAfterSubmit
-                        backToTrueIn={3000}
+                        validFunc={checkTags} // callBack valid func
+                        min={2} // минимальное кол-во символов
+                        max={500} // максимальное кол-во символов
+                        isTrigger // Этот пропс должен быть у ОДНОГО из филдов, без него не будет работать useAction
+                        resetAfterSubmit // Удаление локальных данных после подтверждения
+                        backToTrueIn={3000} // Спустя 3 секунды возвращается в положение True (Чисто стили)
                         />
                     </div>
                     <div>
-                        <label htmlFor="file">
+                        <label htmlFor="file"> 
                             <div className="image-field">
                                 <img className="img is-clickable" src="screpka.png" alt="" />
                                 <FileField
-                                name="file"
-                                id="file"
-                                updateOnChange
-                                allowNull
+                                name="file" // имя
+                                id="file" // ID непосредственно лейбла который за это отвечает
+                                updateOnChange // Обновлять глобальное состояние при обновлении. Единствнный минус - нельзя выбрать два раза
+                                // подряд один и тот же самый элемент
+                                allowNull // Обозначение необязательного поля
                                 types={[
-                                    {typeName:'image/',maxSize:100,typeSize:"mbytes"},
-                                    {typeName:'text/plain',maxSize:100,typeSize:"kbytes"}]}
+                                    {typeName:'image/',maxSize:100,typeSize:"mbytes"}, // Данные о файле (Какой файл можно сетить)
+                                    {typeName:'text/plain',maxSize:100,typeSize:"kbytes"}]} // Данные о файле (какой файл можно сетить)
                                 />
                             </div>
                         </label>

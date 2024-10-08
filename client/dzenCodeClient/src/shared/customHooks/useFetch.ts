@@ -3,7 +3,7 @@ import { useState, useEffect } from 'react';
 type FetchOptions = RequestInit; 
 
 
-function useFetch(url: string, options?: FetchOptions) {
+function useFetch(url: string,dep:any[], options?: FetchOptions) {
   const [state, setState] = useState({
     data: null,
     loading: true,
@@ -44,7 +44,7 @@ function useFetch(url: string, options?: FetchOptions) {
     return () => {
       isMounted = false;
     };
-  }, [url, options]); 
+  }, [url, options, ...dep]); 
 
   return state;
 }
