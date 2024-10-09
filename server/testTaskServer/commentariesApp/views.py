@@ -76,21 +76,21 @@ class MessageView(ModelViewSet):
     def list(self, request, *args, **kwargs):
         try:
             pageNumber = request.GET.get("page", 1)
-            isFilterByName = request.GET.get("by-name")
-            isFilterByEmail = request.GET.get("by-email")
+            # isFilterByName = request.GET.get("by-name")
+            # isFilterByEmail = request.GET.get("by-email")
             isFilterByDate = request.GET.get("by-date","descending")
 
             keyOfCache = CacheNameBuilder(
                 self.filteredCacheName,{
-                    "isFilterByName": isFilterByName,
-                    "isFilterByEmail": isFilterByEmail,
-                    "isFilterByDate": isFilterByDate,
+                    # "isFilterByName": isFilterByName, -> Не успел доделать фильтрацию 
+                    # "isFilterByEmail": isFilterByEmail,
+                    "isFilterByDate": isFilterByDate, # По стандарту -> LIFO
                     "page": pageNumber
                 })
                 
 
 
-            if keyOfCache == False:
+            if keyOfCache == False: # Если функция билдер вернула - false значит были переданы неверные параметры
                 return Response({"message":"wrong params"},status=status.HTTP_400_BAD_REQUEST)
 
             cachedData = CacheMethods.getCache(keyOfCache)
@@ -100,44 +100,21 @@ class MessageView(ModelViewSet):
             result = Message.objects.filter(isAnswer=False)
 
 
-            if isFilterByName:
-                result = orderBy(result, "username", isFilterByName)
-            if isFilterByEmail:
-                result = orderBy(result, "email", isFilterByEmail)
+            # if isFilterByName: 
+            #     result = orderBy(result, "username", isFilterByName) 
+            # if isFilterByEmail:
+            #     result = orderBy(result, "email", isFilterByEmail)
             if isFilterByDate:
                 result = orderBy(result, "dateOfCreating", isFilterByDate)
 
-            paginator = self.pagination_class()
+            paginator = self.pagination_class() # Пагинация
             paginatedMessages = paginator.paginate_queryset(result, request)
             serializedData = self.serializer_class(paginatedMessages, many=True)
 
-            CacheMethods.setCache(keyOfCache, paginator.get_paginated_response(serializedData.data).data, 120) 
-            cacheToReturn = CacheMethods.getCache(keyOfCache)
+            CacheMethods.setCache(keyOfCache, paginator.get_paginated_response(serializedData.data).data, 120) # Сохранение кеша
+            cacheToReturn = CacheMethods.getCache(keyOfCache) # получение сохранённого кеша
 
-            return Response(cacheToReturn)
-
-        except Exception as e:
-            print(e)
-            return Response({"message": "Something went wrong"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-
-    def update(self, request, *args, **kwargs):
-        try:
-            response = super().update(request, *args, **kwargs)
-
-            updatedMessage = self.get_object()
-
-            sortedMessages = Message.objects.order_by('-dateOfCreating')
-
-            elPosition = list(sortedMessages).index(updatedMessage) + 1  
-
-            messagesPerPage = 25
-
-            pageNumber = math.ceil(elPosition / messagesPerPage)
-
-            nameCacheToDelete = CacheNameBuilder(self.filteredCacheName, {"page": pageNumber})
-            CacheMethods.deleteCache(nameCacheToDelete) # Удаляю кеш страницы на которой был обновлен предмет (Если была)
-
-            return Response({"message": response.data}, status=status.HTTP_200_OK)
+            return Response(cacheToReturn) # Возвращаю кеш, чтоб унифицировать возращение данных
 
         except Exception as e:
             print(e)
